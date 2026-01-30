@@ -1,0 +1,436 @@
+This is a program made on Notepad++ used to help new electrical engineers or generally people wanting to learn how very basic circuits work based on their formulas and calculations.
+
+
+#include <stdio.h> // used for the general codes like printf,scanf, looping.
+#include <stdlib.h> // used for random numbers and system functions
+#include <time.h> // personally used for random generated seeds for quizzes
+#include <math.h> // used for math functions (fabs)
+#include <string.h> // used strings to limit integers and values
+
+#ifdef _WIN32
+    #define CLEAR_SCREEN "cls" // for windows users
+#else
+    #define CLEAR_SCREEN "clear" // for linux or mac users
+#endif
+// three main choices
+void circuit_quiz(int total_questions); 
+void circuit_measurements();
+void study_mode();
+
+int quiz_in_progress = 0; // checks or tracks of the quiz is running
+int current_question = 0;  // Tracks which question the user is currently on
+int total_quiz_questions = 0; //stores the questions
+int correct_answers = 0; // counting the correct answers
+int quit_confirmed = 0; // detects if the user is willing to quit
+
+int main() {
+    int choice;
+    while (1) { // infinite loop using user's choices selection 
+        system(CLEAR_SCREEN); // this clears the screen after each choice of the user's
+        printf("\n===== Engineering Circuit Helper =====\n"); //title 
+        printf("1. Circuit Quiz\n");
+        printf("2. Circuit Measurements\n");
+        printf("3. Study Mode\n");
+        printf("4. Exit\n");
+        printf("Choose an option: ");
+        scanf("%d", &choice);
+
+        system(CLEAR_SCREEN); // this clears the screen after each choice of the user's
+        
+        switch (choice) { // now the choices executes different functions all based on the user's choices
+            case 1: { // this is the case if the user choose the circuit quiz
+                int quiz_choice;
+                printf("===== Circuit Quiz =====\n"); // title and all possible choices
+                printf("1. Mini Quiz (5 Questions)\n");
+                printf("2. Full Quiz (10 Questions)\n");
+                printf("3. Study Mode\n");
+                printf("Choose an option: ");
+                scanf("%d", &quiz_choice);
+                
+                system(CLEAR_SCREEN);
+                if (quiz_choice == 1) {
+                    circuit_quiz(5);
+                } else if (quiz_choice == 2) {
+                    circuit_quiz(10);
+                } else if (quiz_choice == 3) {
+                    study_mode(); // an option for later to make the user go to study mode during the quiz
+                }
+                break; // in here it shows the future of "what if" the user choose this, it could be either study mode, the mini quiz or the full quiz
+            }
+            case 2: // this is if the use r have choosen circuit measuring
+                circuit_measurements();
+                break;
+            case 3: // this is if the user have choosen study mode
+                study_mode();
+                break;
+            case 4: // this is if the user decided to quit
+                printf("Exiting program. Goodbye!\n"); // tells the user a goodbye
+                return 0; // exits the program
+            default:
+                printf("Invalid choice. Please select again.\n"); // this is here to prevent any crashes if the user did not enter anything other than 1,2,3, or for and lets the user know about it by this message
+        }
+        printf("\nPress Enter to continue..."); // tells the user after saying goodbye to press enter to exit
+        getchar();
+        getchar();
+		// all the break(s) here were used to ensure that the execution is stopped after one case is executed
+		// getchar waits for the user to press enter to exit the program
+    }
+}
+
+void circuit_measurements() { // similar to the previous one
+    int choice;
+    float V, I, R, total_resistance, total_voltage, total_current; // the content also ensuring floats included
+
+    while (1) { // inf loop
+        system(CLEAR_SCREEN);
+        printf("===== Circuit Measurements =====\n");
+        printf("1. Find Current (Ohm's Law)\n");
+        printf("2. Find Voltage (Ohm's Law)\n");
+        printf("3. Find Resistance (Ohm's Law)\n");
+        printf("4. Return to Main Menu\n");
+        printf("Choose an option: ");
+        scanf("%d", &choice);
+
+        system(CLEAR_SCREEN);
+		// the user choices on the circuit measurement with screen clearing
+        switch (choice) { //executes other calculations other than the user's choice/command
+            case 1: {  // Find Current
+                printf("===== Find Current =====\n");
+                printf("You can use Ohm's Law: I = V / R\n");
+                printf("Do you want the components to be in parallel, series, or mixed?\n");
+                printf("1. Parallel\n2. Series\n3. Mixed\nChoose: ");
+                int connection_type;
+                scanf("%d", &connection_type);
+				// the user can choose how they want their circuit to be like to find the current
+                if (connection_type == 1) { // this is the first type of connection which is parallel
+                    printf("Enter total voltage (V): ");
+                    scanf("%f", &V);
+                    printf("Enter total resistance (R) in parallel: ");
+                    scanf("%f", &R);
+                    I = V / R;
+                    printf("Current (I) = %.2f A\n", I); //this is the formula applied
+                } else if (connection_type == 2) { // 2nd type of connection which is series
+                    printf("Enter total voltage (V): ");
+                    scanf("%f", &V);
+                    printf("Enter total resistance (R) in series: ");
+                    scanf("%f", &R); 
+                    I = V / R;
+                    printf("Current (I) = %.2f A\n", I); //applied formula
+                } else if (connection_type == 3) { // 3rd type of connection which is a mix of series and parallel
+                    printf("Enter total voltage (V): ");
+                    scanf("%f", &V);
+                    printf("Enter total resistance (R) in series: ");
+                    scanf("%f", &R);
+                    float series_current = V / R;
+                    printf("Enter resistance in parallel (Rp): ");
+                    float Rp;
+                    scanf("%f", &Rp);
+                    float parallel_current = V / Rp;
+                    I = series_current + parallel_current;
+                    printf("Total Current (I) = %.2f A (from series and parallel combination)\n", I); //applied formula does each independently then adds them together 
+                }
+                break; //stop execution
+            }
+            case 2: {  // Find Voltage
+                printf("===== Find Voltage =====\n");
+                printf("You can use Ohm's Law: V = I * R\n");
+                printf("Do you want the components to be in parallel, series, or mixed?\n");
+                printf("1. Parallel\n2. Series\n3. Mixed\nChoose: ");
+                int connection_type;
+                scanf("%d", &connection_type);
+				//same thing all over again, asking the user how they want to find their voltage in which type of circuit
+                if (connection_type == 1) { // parallel circuit
+                    printf("Enter current (I): ");
+                    scanf("%f", &I);
+                    printf("Enter total resistance (R) in parallel: ");
+                    scanf("%f", &R);
+                    V = I * R;
+                    printf("Voltage (V) = %.2f V\n", V); //applied formula
+                } else if (connection_type == 2) { // series circuit
+                    printf("Enter current (I): ");
+                    scanf("%f", &I);
+                    printf("Enter total resistance (R) in series: ");
+                    scanf("%f", &R); 
+                    V = I * R;
+                    printf("Voltage (V) = %.2f V\n", V); //applied formula
+                } else if (connection_type == 3) { // mixed of series and parallel
+                    printf("Enter current (I): ");
+                    scanf("%f", &I);
+                    printf("Enter resistance in series (Rs): ");
+                    scanf("%f", &R);
+                    float series_voltage = I * R;
+                    printf("Enter resistance in parallel (Rp): ");
+                    float Rp;
+                    scanf("%f", &Rp);
+                    float parallel_voltage = I * Rp;
+                    V = series_voltage + parallel_voltage;
+                    printf("Total Voltage (V) = %.2f V (from series and parallel combination)\n", V); // applied formula
+                }
+                break; //stop execution
+            }
+            case 3: {  // Find Resistance
+                printf("===== Find Resistance =====\n");
+                printf("You can use Ohm's Law: R = V / I\n");
+                printf("Do you want the components to be in parallel, series, or mixed?\n");
+                printf("1. Parallel\n2. Series\n3. Mixed\nChoose: ");
+                int connection_type;
+                scanf("%d", &connection_type);
+				//same thing all over again, asking the user how they want to find their voltage in which type of circuit
+                if (connection_type == 1) { // parallel circuit
+                    printf("Enter total voltage (V): ");
+                    scanf("%f", &V);
+                    printf("Enter total current (I) in parallel: ");
+                    scanf("%f", &I);
+                    R = V / I;
+                    printf("Resistance (R) = %.2f Ω\n", R); //applied formula 
+                } else if (connection_type == 2) { // series circuit
+                    printf("Enter total voltage (V): ");
+                    scanf("%f", &V);
+                    printf("Enter total current (I) in series: ");
+                    scanf("%f", &I);
+                    R = V / I;
+                    printf("Resistance (R) = %.2f Ω\n", R);
+                } else if (connection_type == 3) { // mixed circuit of both series and parallel connections
+                    printf("Enter total voltage (V): ");
+                    scanf("%f", &V);
+                    printf("Enter current in series (Is): ");
+                    scanf("%f", &I);
+                    float series_resistance = V / I;
+                    printf("Enter current in parallel (Ip): ");
+                    float Ip;
+                    scanf("%f", &Ip);
+                    float parallel_resistance = V / Ip;
+                    R = series_resistance + parallel_resistance;
+                    printf("Total Resistance (R) = %.2f Ω (from series and parallel combination)\n", R); //applied formula 
+                }
+                break; // stop execute 
+            }
+            case 4: // 4th case which DOES not make the user exit the program, but makes them go back to the main menu
+                return;
+            default:
+                printf("Invalid choice.\n");
+                break; // stops execute  // also if the user enters something unregistered, it wont crash nor work
+        }
+
+        printf("\nPress Enter to continue..	.");
+        getchar();
+        getchar();
+    }	// enter to continue to leave that spot to go back to the main menu
+}
+
+void circuit_quiz(int total_questions) { // this runs the quiz, doesn't allow it to go back to void
+    srand(time(0)); // same as using NULL which will generate a random seed for this randomised quiz
+    float correct_answers = 0; // tracks how many questions answered correctly
+    char input[10]; // user input for entry
+    quit_confirmed = 0; // exit the quiz
+    int total_quiz_questions = total_questions; // Store total questions for this quiz session
+
+    for (int i = current_question; i < total_questions; i++) { // start from current_question to prevent skipping
+        int question_type = rand() % 6; // puts a maximum value of 5 integers e.g resistors(R1,R2,R3,R4,R5)
+        float answer;
+
+        printf("\nQuestion %d/%d:\n", i + 1, total_questions); // this displays the question
+        
+        switch (question_type) {
+            case 0: { // Mixed Resistor Question
+                int R1 = rand() % 20 + 1;  // value from 0-20 ohms generates random values
+                int R2 = rand() % 20 + 1;
+                int R3 = rand() % 20 + 1;  // floats included
+                float parallel = (R2 * R3) / (float)(R2 + R3); 
+                answer = R1 + parallel;
+                printf("R2 = %dΩ and R3 = %dΩ are in parallel. They are in series with R1 = %dΩ. Find total resistance.\n", R2, R3, R1); // display question example
+                break; // stop execute
+            }
+            case 1: { // Mixed Capacitor Question
+                int C1 = rand() % 10 + 1; // value from 0-10 Fardas/Micro Farads generates random values
+                int C2 = rand() % 10 + 1;
+                int C3 = rand() % 10 + 1;
+                float parallel = (float)(C1 + C2); // floats included, (how it should be solved)
+                answer = 1 / (1 / parallel + 1 / (float)C3);
+                printf("C1 = %dμF and C2 = %dμF are in parallel. They are in series with C3 = %dμF. Find total capacitance.\n", C1, C2, C3); // display question example
+                break; // stop execute
+            }
+            case 2: { // Voltage divider
+                int R1 = rand() % 20 + 1; // value from 0-20 ohms generates random values
+                int R2 = rand() % 20 + 1;
+                answer = 12 * (float)R2 / (R1 + R2); // float (how it should be solved)
+                printf("Given resistances R1 = %dΩ and R2 = %dΩ, and a supply voltage of 12V, find the voltage across R2.\n", R1, R2); // display question example
+                break; // stop execute
+            }
+            case 3: { // Series Capacitors
+                int C1 = rand() % 10 + 1; // value from 0-10 Fardas/Micro Farads generates random values
+                int C2 = rand() % 10 + 1;
+                answer = 1 / ((1.0 / C1) + (1.0 / C2));  //(how it should be solved)
+                printf("Find the total capacitance when C1 = %dμF and C2 = %dμF are in series.\n", C1, C2); // display question example
+                break; // stop execute
+            }
+            case 4: { // Parallel Resistors
+                int R1 = rand() % 20 + 1; // value from 0-20 ohms generates random values
+                int R2 = rand() % 20 + 1;
+                answer = (R1 * R2) / (float)(R1 + R2); // float (how it should be solved)
+                printf("Find the total resistance when R1 = %dΩ and R2 = %dΩ are in parallel.\n", R1, R2); // display question example
+                break;
+            }
+            case 5: { // Ohm's law
+                int V = rand() % 10 + 1; // random voltage value 0-10
+                int R = rand() % 10 + 1; // random resistance value 0-10
+                answer = V / (float)R; // float (how it should be solved)
+                printf("Given voltage V = %dV and resistance R = %dΩ, find the current.\n", V, R); // display question example
+                break; // stops execute
+            }
+        }
+
+        float user_answer; // user's answer (floats included)
+        printf("Your answer: "); // where you type your answer
+        getchar();
+        fgets(input, 10, stdin); // making sure its max of 10 characters (string)
+        sscanf(input, "%f", &user_answer); // scanning
+        
+        // Fixed braces
+        if (fabs(user_answer - answer) < 0.05) { // Allow a tolerance of 0.05
+            correct_answers++;
+            printf("Correct!\n"); // Display correct
+        } else if (fabs(user_answer - answer) < 0.1 && user_answer != answer) { // This helps the user if they are 0.1 away from the correct answer. It will count as correct
+            correct_answers++;
+            printf("Correct!\n"); // Display correct
+        } else {
+            printf("Wrong. The correct answer is %.2f\n", answer); // Displays that this is a wrong answer and provides the correct answer
+        }
+
+        if (i + 1 == total_questions) { // Counts down total questions
+            printf("\nYou've completed the quiz!\n"); // Displays to the user that they have finished the quiz
+            printf("Your score: %.0f/%d\n", correct_answers, total_questions); // Display score. Gives out the score to the user
+            break;
+        }
+
+        printf("\nDo you want to continue? Press any key to continue or Q/q to quit: "); // you can quit the quiz if you press Q or q
+        fgets(input, 10, stdin);
+        if (input[0] == 'Q' || input[0] == 'q') { // Press Q or q to quit the quiz
+            printf("Are you sure you want to quit? (y/n): "); // Double checks if you want to quit
+            fgets(input, 10, stdin);
+            if (input[0] == 'y' || input[0] == 'Y') { // Checks if it's lower or uppercase
+                quit_confirmed = 1; // quitting
+                break; // stop execute
+            } else {
+                printf("Continuing the quiz...\n"); // If not, you continue the quiz
+            }
+        }
+    }
+}
+
+void study_mode() { 			// study mode option with finally its interactive options
+    int choice;
+					//very similar design to the first
+    while (1) {	// ensures program is still running
+        system(CLEAR_SCREEN); // clearing screen 
+        printf("===== Study Mode =====\n");
+        printf("1. Resistors in Series and Parallel\n");
+        printf("2. Capacitors in Series and Parallel\n");
+        printf("3. Ohm's Law\n");
+        printf("4. Currents in Series and Parallel\n");  
+        printf("5. Back to Main Menu\n");
+        printf("Choose an option: ");
+        scanf("%d", &choice);
+			// all of these are choices the user can study
+        system(CLEAR_SCREEN);
+
+        switch (choice) {
+            case 1:		// first choice, R in series and parallel
+                printf("===== Resistors in Series and Parallel =====\n");
+                printf("1. Resistors in Series: R_total = R1 + R2 + ...\n");
+                printf("2. Resistors in Parallel: 1 / R_total = 1 / R1 + 1 / R2 + ...\n");
+                printf("Do you want to see an example?\n");
+                printf("1. Example in Series\n2. Example in Parallel\n3. Go back\n");
+					// Choices for the user
+                int sub_choice1;
+                scanf("%d", &sub_choice1);
+                switch (sub_choice1) {
+                    case 1:
+                        printf("Example: Two resistors in series, R1 = 5Ω and R2 = 10Ω, Total Resistance = R1 + R2 = 5Ω + 10Ω = 15Ω\n"); // e.g of series
+                        break;
+                    case 2:
+                        printf("Example: Two resistors in parallel, R1 = 5Ω and R2 = 10Ω, Total Resistance = 1 / (1/R1 + 1/R2) = 3.33Ω\n"); // e.g of parallel
+                        break;
+                    case 3:
+                        return; // Go back
+                    default:
+                        printf("Invalid choice.\n");
+                        break;
+                }
+                break;
+            case 2:		// second choice, C in series and parallel
+                printf("===== Capacitors in Series and Parallel =====\n");
+                printf("1. Capacitors in Series: 1 / C_total = 1 / C1 + 1 / C2 + ...\n");
+                printf("2. Capacitors in Parallel: C_total = C1 + C2 + ...\n");
+                printf("Do you want to see an example?\n");
+                printf("1. Example in Series\n2. Example in Parallel\n3. Go back\n");
+					// Choices for the user
+                int sub_choice2;
+                scanf("%d", &sub_choice2);
+                switch (sub_choice2) { // a sub choice where the user could see example questions with their solution
+                    case 1:
+                        printf("Example: Two capacitors in series, C1 = 5μF and C2 = 10μF, Total Capacitance = 1 / (1/C1 + 1/C2) = 3.33μF\n"); // e.g of series
+                        break;
+                    case 2:
+                        printf("Example: Two capacitors in parallel, C1 = 5μF and C2 = 10μF, Total Capacitance = C1 + C2 = 15μF\n"); 	// e.g of parallel
+                        break;
+                    case 3:
+                        return; // Go back
+                    default: // displays invalid choice if user pressed on something unregistered
+                        printf("Invalid choice.\n");
+                        break;
+                }
+                break;
+            case 3: 	// third choice, general Ohm's law
+                printf("===== Ohm's Law =====\n");
+                printf("Ohm's law states that V = I * R\n");
+                printf("Do you want to see an example?\n");
+                printf("1. Example\n2. Go back\n");
+					// Choices for the user
+                int sub_choice3;
+                scanf("%d", &sub_choice3);
+                switch (sub_choice3) { // a sub choice where the user could see example questions with their solution
+                    case 1:
+                        printf("Example: Given V = 12V and R = 4Ω, the current is I = V / R = 12V / 4Ω = 3A\n"); // e.g of Ohm's law
+                        break;
+                    case 2:
+                        return;  // Go back
+                    default: // displays invalid choice if user pressed on something unregistered
+                        printf("Invalid choice.\n");
+                        break;
+                }
+                break;
+            case 4:		// fourth choice, I in series and parallel
+                printf("===== Currents in Series and Parallel =====\n");
+                printf("1. Current in Series: Same current through all components.\n");
+                printf("2. Current in Parallel: Current divides among branches.\n");
+                printf("Do you want to see an example?\n");
+                printf("1. Example in Series\n2. Example in Parallel\n3. Go back\n");
+                int sub_choice4;
+                scanf("%d", &sub_choice4);
+                switch (sub_choice4) { // a sub choice where the user could see example questions with their solution
+                    case 1:
+                        printf("Example: In a series circuit with R1 = 5Ω, R2 = 10Ω, and V = 15V, the current is I = V / (R1 + R2) = 1A\n"); // e.g of series
+                        break;
+                    case 2:
+                        printf("Example: In a parallel circuit with R1 = 5Ω, R2 = 10Ω, and V = 15V, the currents are I1 = 3A and I2 = 1.5A. Total current = 4.5A\n"); // e.g of parallel
+                        break;
+                    case 3:
+					     return;  // Go back
+                    default: // displays invalid choice if user pressed on something unregistered
+                        printf("Invalid choice.\n");
+                        break;
+                }
+                break;
+            case 5:		// final choice, 
+                return; // Back to quiz mode (or main menu)
+            default:
+                printf("Invalid choice. Please select again.\n");
+        }
+
+        printf("\nPress Enter to continue...");
+        getchar();
+        getchar();
+		// pressing enter twice to exit the program
+    }
+}
