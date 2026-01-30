@@ -1,0 +1,504 @@
+This is used for an automated packing system. Used Keil Studio for this.
+
+
+
+#include "mbed.h"           // Main mbed library for KL46Z microcontroller functions 
+#include <cstring>          // C string library for string manipulation functions 
+ 
+// DIP switch configuration (8 switches total - 4 for boxes, 4 for pieces) 
+// The switches are used to imply how many boxes & pieces the system will process 
+// Using PullUp means switches read HIGH (1) when open, LOW (0) when closed 
+ 
+        DigitalIn switch0(D0, PullUp);   // Box count bit 0 (least significant bit - worth 1) 
+        DigitalIn switch1(A0, PullUp);   // Box count bit 1 (worth 2), A0 used instead of D1 because D1 had a 
+problem 
+        DigitalIn switch2(D2, PullUp);   // Box count bit 2 (worth 4) 
+        DigitalIn switch3(D3, PullUp);   // Box count bit 3 (most significant bit - worth 8) 
+        // D0,A0,D2,D3 are used for the amount of boxes 
+ 
+        DigitalIn switch4(D4, PullUp);   // Piece count bit 0 (least significant bit - worth 1) 
+        DigitalIn switch5(D5, PullUp);   // Piece count bit 1 (worth 2) 
+        DigitalIn switch6(D6, PullUp);   // Piece count bit 2 (worth 4) 
+        DigitalIn switch7(D7, PullUp);   // Piece count bit 3 (most significant bit - worth 8) 
+        // D4,D5,D6,D6 are used for the amount of pieces 
+ 
+// Emergency stop button (SW3 button on the KL46Z board) 
+// When pressed, this immediately stops all operations for safety 
+DigitalIn stopButton(PTC12, PullUp);  // Reads 0 when pressed, 1 when released (PTC12 is SW3) 
+ 
+// Start button (SW1 button on the KL46Z board) 
+// When pressed, this starts the packing system operation 
+// Also used to restart system after emergency stop 
+DigitalIn startButton(PTC3, PullUp);  // Reads 0 when pressed, 1 when released (PTC3 is SW1) 
+ 
+        // These are the LEDs used for the Conveyor 
+        // Only ONE of these should be on at a time (either moving or stopped, not both) 
+        DigitalOut conveyorGreen(D8);    // Lights up when conveyor belt is moving 
+        DigitalOut conveyorRed(D9);      // Lights up when conveyor belt is stopped 
+ 
+        // These are the LEDs for the nozzle 
+        // Only ONE of these should be on at a time (either dispensing or closed, not both) 
+        DigitalOut nozzleGreen(D10);     // Lights up when nozzle is dispensing pieces 
+        DigitalOut nozzleRed(D11);       // Lights up when nozzle is closed 
+ 
+// Serial Monitor representation, also the panel which will show you what's your system's current state is 
+on 
+UnbuAeredSerial serial(USBTX, USBRX, 9600);  // 9600 baud rate 
+ 
+// This senses if the user has clicked on the emergency stop button (SW3) 
+volatile bool emergencyStopPressed = false; 
+ 
+/* 
+ * smartDelay function 
+ * This is a custom delay function that checks the emergency stop button frequently 
+ * Instead of just waiting for the full delay time, it breaks the delay into small chunks 
+ * and checks the button every 50ms, so we can respond quickly when button is pressed 
+ *  
+ * Parameters: 
+ *   milliseconds - how long to delay in total (in milliseconds) 
+ *  
+ * How it works: 
+ *   - Divides the delay into 50ms chunks 
+ *   - Checks stop button after each chunk 
+ *   - Returns immediately if button is pressed 
+ *   - This gives us ~50ms response time instead of waiting full delay 
+ */ 
+        void smartDelay(int milliseconds) { 
+            // Calculate how many 50ms chunks fit into the requested delay 
+            int chunks = milliseconds / 50; 
+             
+            // Loop through each chunk 
+            for(int i = 0; i < chunks; i++) { 
+                // Check if stop button is pressed (reads 0 when pressed) 
+                if(stopButton.read() == 0) { 
+                    emergencyStopPressed = true;  // Set the flag 
+                    return;  // Exit immediately - don't continue delaying 
+                } 
+                thread_sleep_for(50);  // Wait 50ms before checking again 
+            } 
+             
+            // Handle any remaining time that doesn't fit into a 50ms chunk 
+            // For example, if delay is 520ms, we do 10 chunks of 50ms, then 20ms remainder 
+            int remainder = milliseconds % 50; 
+            if(remainder > 0) { 
+                // Check button one more time before the final delay 
+                if(stopButton.read() == 0) { 
+                    emergencyStopPressed = true; 
+                    return; 
+                } 
+                thread_sleep_for(remainder);  // Wait the remaining time 
+            } 
+        } 
+        // thanks to the help of AI, I managed  to add that part which would help the user see their live 
+configuration(s) 
+ 
+int main() { 
+    // BuAer for storing messages before sending to serial monitor 
+    // This just basically gives me room of 200 characters to type to the user a message 
+    char buAer[200]; 
+     
+    // Main system loop - allows restart after emergency stop using SW1 
+    // This loop wraps the entire system so it can restart without pressing board reset 
+    while(1) { 
+        // Reset emergency stop flag at the start of each cycle 
+        emergencyStopPressed = false; 
+         
+        /*======================================================================== 
+          PHASE 1: STARTUP AND CONFIGURATION MONITORING 
+          Show welcome message and wait for user to press SW1 button to start 
+          User can adjust DIP switches until they're ready 
+          =======================================================================*/ 
+         
+                        // Welcome message 
+                        int len = snprintf(buAer, sizeof(buAer),  
+                                "\r\n=== AUTOMATED PACKING SYSTEM ===\r\n"); 
+                        serial.write(buAer, len);  // Send the message 
+                         
+                        // Explain what the DIP switches do 
+                        len = snprintf(buAer, sizeof(buAer),  
+                                "Flip DIP switches to configure:\r\n"); 
+                        serial.write(buAer, len); 
+                         
+                        // Tell user what switches 1-4 control (white wires in my setup) 
+                        len = snprintf(buAer, sizeof(buAer),  
+                                "  Switches 1-4 (WHITE): Number of boxes (0-15)\r\n"); // Basically the boxes 
+(D0,A0,D2,D3) 
+                        serial.write(buAer, len);  
+                         
+                        // Tell user what switches 5-8 control (pink wires in my setup) 
+                        len = snprintf(buAer, sizeof(buAer),  
+                                "  Switches 5-8 (PINK): Pieces per box (0-15)\r\n\r\n"); // Basically the pieces 
+(D4,D5,D6,D7) 
+                        serial.write(buAer, len); 
+         
+     
+        // Initialize all LEDs to safe state at startup (red LEDs) 
+        // Both red LEDs on means everything is stopped and closed (safe state) 
+        conveyorRed = 1;      // Conveyor is stopped (red light on) 
+        conveyorGreen = 0;    // Conveyor is not moving (green light oA) 
+        nozzleRed = 1;        // Nozzle is closed (red light on) 
+        nozzleGreen = 0;      // Nozzle is not dispensing (green light oA) 
+         
+        // Inform the user to press SW1 button to start the system 
+        len = snprintf(buAer, sizeof(buAer),  
+                 "Press SW1 button to START system...\r\n\r\n"); 
+        serial.write(buAer, len); 
+         
+        // Wait for any previous button press to be released before monitoring 
+        // This prevents immediate restart if SW1 is still held down 
+        while(startButton.read() == 0) { 
+            thread_sleep_for(50);  // Wait until button is released 
+        } 
+        thread_sleep_for(200);  // Small debounce delay 
+         
+        // Monitoring loop - runs indefinitely until SW1 is pressed 
+        // This lets the user see the current (LIVE) switch configuration and adjust it 
+        // The loop continues showing updates every 0.5 seconds until start button is pressed 
+        while(startButton.read() == 1)  // While SW1 is NOT pressed (reads 1 when not pressed) 
+        {        
+                /* FOR THE BOX: 
+                // READ BOX COUNT from switches 1-4 (D0-D3) 
+                // We use "!" to invert because PullUp makes OFF=1 and ON=0 
+                // So !switch0.read() converts it to: ON=1, OFF=0 (which makes more sense) 
+                */ 
+                int bit0 = !switch0.read();  // Least significant bit (worth 1) 
+                int bit1 = !switch1.read();  // Worth 2 
+                int bit2 = !switch2.read();  // Worth 4 
+                int bit3 = !switch3.read();  // Most significant bit (worth 8) 
+                 
+                // Combine the 4 bits into a single number (0-15) 
+                // This uses binary math: (bit3×8) + (bit2×4) + (bit1×2) + (bit0×1) 
+                // Example: if bits are 0101, then (0×8)+(1×4)+(0×2)+(1×1) = 5  
+                int boxCount = (bit3 << 3) | (bit2 << 2) | (bit1 << 1) | bit0; 
+     
+                /* FOR THE PIECES: 
+                // READ PIECE COUNT from switches 5-8 (D4-D7) 
+                // Same process as box count but using diAerent switches 
+                */ 
+                int bit4 = !switch4.read();  // Least significant bit (worth 1) 
+                int bit5 = !switch5.read();  // Worth 2 
+                int bit6 = !switch6.read();  // Worth 4 
+                int bit7 = !switch7.read();  // Most significant bit (worth 8) 
+             
+            // Combine the 4 bits into piece count (0-15) 
+            int pieceCount = (bit7 << 3) | (bit6 << 2) | (bit5 << 1) | bit4; 
+             
+            // Display current configuration waiting for button press 
+            // Shows binary representation and decimal value for both box and piece counts 
+            len = snprintf(buAer, sizeof(buAer),  
+                     "BOX: [%d %d %d %d] = %d | PIECES: [%d %d %d %d] = %d | Press SW1 to START\r\n", 
+                     bit3, bit2, bit1, bit0, boxCount,      // Box count in binary and decimal 
+                     bit7, bit6, bit5, bit4, pieceCount);   // Piece count in binary and decimal 
+            serial.write(buAer, len); 
+             
+            thread_sleep_for(500);  // Wait half a second before next update 
+            // The user will get an update of their current choices displaying for both the boxes and the pieces 
+each 0.5 seconds 
+        } 
+         
+        // SW1 button has been pressed - system will now start! 
+        // Announce that button was pressed and system is starting 
+        len = snprintf(buAer, sizeof(buAer),  
+                 "\r\n>>> SW1 PRESSED - STARTING SYSTEM <<<\r\n\r\n"); 
+        serial.write(buAer, len); 
+         
+         
+        /*============================================================================== 
+           PHASE 2: READ FINAL CONFIGURATION 
+           Lock in the values from DIP switches - these won't change during operation 
+          ===============================================================================*/ 
+         
+                // Read the box count one final time 
+                // This is the value that will be used 
+                int boxCount = (!switch3.read() << 3) |  // bit 3 (×8) 
+                            (!switch2.read() << 2) |  // bit 2 (×4) 
+                            (!switch1.read() << 1) |  // bit 1 (×2) 
+                            !switch0.read();          // bit 0 (×1) 
+                 
+                // Read the piece count one final time 
+                // This is how many pieces will go in each box 
+                int pieceCount = (!switch7.read() << 3) |  // bit 3 (×8) 
+                                (!switch6.read() << 2) |  // bit 2 (×4) 
+                                (!switch5.read() << 1) |  // bit 1 (×2) 
+                                !switch4.read();          // bit 0 (×1) 
+                 
+        // Display the final configuration that will be used 
+        len = snprintf(buAer, sizeof(buAer),  
+                 "=== STARTING PACKING SYSTEM ===\r\n"); // informing user that it will start 
+        serial.write(buAer, len); 
+         
+        len = snprintf(buAer, sizeof(buAer),  
+                 "Configuration: %d boxes with %d pieces each\r\n", // displays what the user's have chosen 
+                 boxCount, pieceCount); 
+        serial.write(buAer, len); 
+         
+        // Remind user about emergency stop functionality 
+        len = snprintf(buAer, sizeof(buAer),  
+                 "Press SW3 button for INSTANT EMERGENCY STOP\r\n\r\n"); // informs the user about the 
+emergency button 
+        serial.write(buAer, len); 
+         
+         
+        /*=============================================== 
+          PHASE 3: INITIAL IDLE STATE 
+          Brief pause before starting operations 
+          Everything is in safe state (stopped/closed) 
+         ==================================================*/ 
+         
+        // Make sure all LEDs are in safe state before we begin 
+        conveyorRed = 1;      // Conveyor stopped 
+        conveyorGreen = 0;    // Not moving 
+        nozzleRed = 1;        // Nozzle closed 
+        nozzleGreen = 0;      // Not dispensing 
+         
+        // waits 2 seconds idle before starting 
+        // smartDelay used here to give a chance to the user to rethink if they need to use the emergency 
+button 
+        smartDelay(2000); 
+         
+        // Checks if stop button was pressed during the idle pause 
+        if(emergencyStopPressed) { 
+            len = snprintf(buAer, sizeof(buAer),  
+                     "\r\n!!! EMERGENCY STOP before starting! !!!\r\n"); 
+            serial.write(buAer, len); 
+            goto emergency_stop;  // Jump to emergency stop handler 
+        } 
+         
+         
+        /*=============================================== 
+          PHASE 4: MAIN PROCESSING LOOP 
+          This is where the actual packing happens 
+          Process each box one at a time according to configuration 
+         =========================================================*/ 
+         
+        // Loop through each box being processed 
+        for (int box = 1; box <= boxCount; box++)  
+        { 
+            // check if emergency stop was triggered before starting this box 
+            if(emergencyStopPressed) break;  // Exit the loop immediately 
+             
+            // Announce which box the system's working on 
+            len = snprintf(buAer, sizeof(buAer),  
+                     ">>> Processing Box %d of %d...\r\n", box, boxCount); // displays which box 
+            serial.write(buAer, len); 
+             
+             
+            /*================================================================== 
+              STATE 1: MOVING BOX TO NOZZLE POSITION 
+              Conveyor belt moves for exactly 5 seconds 
+              Green LED blinks once per second to show movement 
+              Emergency stop is checked every 50ms during this phase 
+             ===================================================================*/ 
+             
+            // Tell user conveyor is starting 
+            len = snprintf(buAer, sizeof(buAer),  
+                     "    Conveyor MOVING (5 seconds)...\r\n"); 
+            serial.write(buAer, len); 
+             
+            // Keep nozzle closed and red while conveyor is moving 
+            // nozzle is closed while conveyor is moving 
+            nozzleRed = 1;        // Nozzle stays closed (red on) 
+            nozzleGreen = 0;      // Not dispensing (green oA) 
+             
+                // Blink conveyor green LED 5 times (once per second) 
+                // This gives a visual representation of the 5-second movement 
+                for(int sec = 0; sec < 5; sec++)  
+                { 
+                    // Check for emergency stop before turning LED on 
+                    if(emergencyStopPressed) break; 
+                     
+                    // Turn conveyor green LED ON (indicates movement) 
+                    conveyorGreen = 1;    // Green on (moving) 
+                    conveyorRed = 0;      // Red oA (not stopped) 
+                    smartDelay(500);      // Stay on for 0.5 seconds (checks button every 50ms) 
+                     
+                    // Check again before turning LED oA 
+                    if(emergencyStopPressed) break; 
+                     
+                    // Turn conveyor green LED OFF 
+                    conveyorGreen = 0;    // Green oA 
+                    conveyorRed = 1;      // Red back on (between blinks) 
+                    smartDelay(500);      // Stay oA for 0.5 seconds (checks button every 50ms) 
+                    // Total time per blink: 0.5s ON + 0.5s OFF = 1 second 
+                } 
+             
+            // Check if emergency stop was triggered during conveyor movement 
+            if(emergencyStopPressed) { 
+                len = snprintf(buAer, sizeof(buAer),  
+                         "\r\n!!! EMERGENCY STOP during conveyor! !!!\r\n"); 
+                serial.write(buAer, len); 
+                break;  // Exit the main for loop 
+            } 
+             
+             
+            /*=========================================================== 
+              STATE 2: DISPENSING PIECES INTO BOX 
+              Nozzle opens and dispenses pieces 
+              Takes 1 second per piece (pieceCount seconds total) 
+              Green LED blinks once per piece so you can count them 
+              Emergency stop is checked every 50ms during this phase 
+             ==============================================================*/ 
+             
+            // Informs the user nozzle is starting to dispense 
+                len = snprintf(buAer, sizeof(buAer),  
+                        "    Nozzle DISPENSING %d pieces (%d seconds)...\r\n",  
+                        pieceCount, pieceCount); 
+                serial.write(buAer, len); 
+                 
+                // Conveyor stops when the nozzle is dispensing pieces 
+                conveyorRed = 1;      // Conveyor stopped (red on) 
+                conveyorGreen = 0;    // Not moving (green oA) 
+                 
+                    // Blink nozzle green LED once for each piece 
+                    // Number of blinks = number of pieces dispensed 
+                    for(int piece = 0; piece < pieceCount; piece++)  
+                    { 
+                        // Check for emergency stop 
+                        if(emergencyStopPressed) break; 
+                         
+                        // Turn nozzle green LED ON (indicates dispensing) 
+                        nozzleGreen = 1;      // Green on (dispensing) 
+                        nozzleRed = 0;        // Red oA (not closed) 
+                        smartDelay(500);      // Stay on for 0.5 seconds (checks button every 50ms) 
+                         
+                        // Check again before turning LED oA 
+                        if(emergencyStopPressed) break; 
+                         
+                        // Turn nozzle green LED OFF 
+                        nozzleGreen = 0;      // Green oA 
+                        nozzleRed = 1;        // Red back on (between pieces) 
+                        smartDelay(500);      // Stay oA for 0.5 seconds (checks button every 50ms) 
+                        // Total time per piece: 0.5s ON + 0.5s OFF = 1 second per piece 
+                    } 
+                 
+                // Check if emergency stop was triggered during dispensing 
+                if(emergencyStopPressed) { 
+                    len = snprintf(buAer, sizeof(buAer),  
+                            "\r\n!!! EMERGENCY STOP during dispensing! !!!\r\n"); 
+                    serial.write(buAer, len); 
+                    break;  // Exit the main for loop 
+                } 
+             
+            // Announce that this box is complete 
+            len = snprintf(buAer, sizeof(buAer),  
+                     "    Box %d COMPLETE! (%d pieces added)\r\n\r\n",  
+                     box, pieceCount); 
+            serial.write(buAer, len); 
+             
+            // Loop continues to next box (if there are more boxes to process) 
+        } 
+         
+         
+        /*========================================================= 
+          PHASE 5: COMPLETION OR EMERGENCY STOP HANDLING 
+          Determine if the system stopped normally or due to emergency 
+          Shows appropriate message and LED pattern 
+         ========================================================*/ 
+         
+        // Check why we exited the main loop 
+     
+            if (emergencyStopPressed)  
+            { 
+                // EMERGENCY STOP PATH 
+                // User pressed the stop button, stopped immediately 
+                 
+                emergency_stop:   
+                 
+                // Announce emergency stop 
+                len = snprintf(buAer, sizeof(buAer),  
+                        "\r\n=== EMERGENCY STOP ACTIVATED ===\r\n"); 
+                serial.write(buAer, len); 
+                 
+                len = snprintf(buAer, sizeof(buAer),  
+                        "System halted INSTANTLY by operator\r\n\r\n"); 
+                serial.write(buAer, len); 
+                 
+                // Flash both red LEDs rapidly to indicate emergency condition 
+                for(int i = 0; i < 6; i++) { 
+                    // Turn both red LEDs ON 
+                    conveyorRed = 1; 
+                    nozzleRed = 1; 
+                    conveyorGreen = 0;  // Make sure greens are oA 
+                    nozzleGreen = 0; 
+                    thread_sleep_for(250);  // Stay on for 0.25 seconds 
+                     
+                    // Turn both red LEDs OFF 
+                    conveyorRed = 0; 
+                    nozzleRed = 0; 
+                    thread_sleep_for(250);  // Stay oA for 0.25 seconds 
+                    // Total flash cycle: 0.5 seconds, done 6 times = 3 seconds of flashing 
+                } 
+            }  
+                    else  
+                    { 
+                        // NORMAL COMPLETION PATH 
+                        // All boxes were processed successfully without emergency stop 
+                         
+                        len = snprintf(buAer, sizeof(buAer),  
+                                "\r\n=== SYSTEM COMPLETE ===\r\n"); 
+                        serial.write(buAer, len); 
+                         
+                        // Show summary of what was accomplished 
+                        len = snprintf(buAer, sizeof(buAer),  
+                                "Successfully processed %d boxes with %d pieces each\r\n", 
+                                boxCount, pieceCount); 
+                        serial.write(buAer, len); 
+                         
+                        // Calculate and display total pieces dispensed 
+                        len = snprintf(buAer, sizeof(buAer),  
+                                "Total pieces dispensed: %d\r\n\r\n", 
+                                boxCount * pieceCount); 
+                        serial.write(buAer, len); 
+                    } 
+         
+         
+        /*=================================================== 
+          PHASE 6: FINAL SAFE STATE 
+          Return everything to stopped/closed position 
+          Both red LEDs stay ON solid to indicate safe state 
+         ========================================================*/ 
+         
+        // This ensures everything is stopped and closed regardless of how we got here 
+        conveyorRed = 1;      // Conveyor stopped (red on) 
+        conveyorGreen = 0;    // Not moving (green oA) 
+        nozzleRed = 1;        // Nozzle closed (red on) 
+        nozzleGreen = 0;      // Not dispensing (green oA) 
+         
+        // Inform user that system is now in safe state 
+        len = snprintf(buAer, sizeof(buAer),  
+                 "System in SAFE state (stopped/closed)\r\n"); 
+        serial.write(buAer, len); 
+         
+        // Tell user they can restart with SW1 button 
+        len = snprintf(buAer, sizeof(buAer),  
+                 "Press SW1 button to RESTART system\r\n\r\n"); 
+        serial.write(buAer, len); 
+         
+         
+        /*===================================================== 
+          PHASE 7: WAIT FOR RESTART 
+          Wait for SW1 button press to restart the entire system 
+          The outer while(1) loop will restart from the beginning 
+         =========================================================*/ 
+         
+        // Wait for button release first (debouncing) 
+        while(startButton.read() == 0) { 
+            thread_sleep_for(50);  // Wait until SW1 is released 
+        } 
+        thread_sleep_for(200);  // Small debounce delay 
+         
+        // Wait for SW1 button press to restart 
+        while(startButton.read() == 1) { 
+            thread_sleep_for(100);  // Check every 100ms for button press 
+        } 
+         
+        // SW1 pressed - announce restart 
+        len = snprintf(buAer, sizeof(buAer),  
+                 "\r\n>>> SW1 PRESSED - RESTARTING SYSTEM <<<\r\n\r\n"); 
+        serial.write(buAer, len); 
+         
+        thread_sleep_for(500);  // Brief pause before restart 
+         
+        // Loop continues - system restarts from the beginning (Phase 1) 
+    } 
+}
