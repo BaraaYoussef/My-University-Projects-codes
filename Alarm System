@@ -1,0 +1,162 @@
+This is an arduino alarm system that uses a PIR sensor. The microcontroller board here that was used as an Arduino Uno Wi-Fi board.
+
+// Pin assignments
+const int redPin = 11;        // Red LED pin (indicates no motion)
+const int bluePin = 10;       // Blue LED pin (indicates motion detected)
+const int greenPin = 9;       // Green LED pin (indicates system is deactivated)
+
+const int buzzerPin = 6;      // Buzzer pin (used for audible alert)
+const int buttonPin = 4;      // Push button pin (used to toggle system state, using internal pull-up resistor)
+const int motorPin = 3;       // Motor or vibration motor output pin (used as an alert when motion is detected)
+const int pirPin = 5;         // PIR motion sensor input pin (detects movement)
+
+
+// System state variables
+bool systemActive = false;           // Keeps track of whether the alarm system is active (true) or not (false)
+bool lastButtonState = HIGH;         // Stores the last read state of the button (HIGH = unpressed due to pull-up)
+unsigned long lastDebounceTime = 0;  // Stores last time the button input changed (used to debounce)
+const unsigned long debounceDelay = 50;  // Debounce delay in milliseconds to avoid false triggers
+
+unsigned long lastButtonPressTime = 0;  // Records time of last button press (used to detect single vs. double press)
+bool buttonPressFlag = false;           // Flag that helps identify if a button was pressed
+
+void setup() {
+  // Set LED pins as output
+  pinMode(redPin, OUTPUT);
+  pinMode(bluePin, OUTPUT);
+  pinMode(greenPin, OUTPUT);
+
+  // Set output devices as output
+  pinMode(buzzerPin, OUTPUT);
+  pinMode(motorPin, OUTPUT);
+
+  // Set button pin as input with internal pull-up resistor
+  pinMode(buttonPin, INPUT_PULLUP);
+
+  // Set PIR sensor pin as input
+  pinMode(pirPin, INPUT);
+
+  // Start serial communication at 9600 baud rate for debugging/output
+  Serial.begin(9600);
+
+  // Start with system deactivated
+  deactivateSystem();
+}
+
+void loop() {
+  handleSerial();     // Check if a serial command is received to activate or deactivate the system
+  checkButton();      // Check if button is pressed (single or double press)
+
+  // If the system is active, respond to motion sensor input
+  if (systemActive) {
+    bool motion = digitalRead(pirPin) == HIGH;  // Read motion sensor (HIGH = motion detected)
+
+    if (motion) {
+      // Flashing Blue - Motion detected
+      Serial.println("Motion Detected!");  // Display message in Serial Monitor
+
+      // Flash blue LED on (motion alert)
+      analogWrite(redPin, 0);        // Turn off red LED
+      analogWrite(greenPin, 0);      // Turn off green LED
+      analogWrite(bluePin, 255);     // Turn on blue LED at full brightness
+
+      // Turn on buzzer and motor
+      tone(buzzerPin, 780);          // Start buzzer at 780 Hz
+      digitalWrite(motorPin, HIGH);  // Turn on motor
+      delay(250);                    // Wait 250ms (first half of flash cycle)
+
+      // Flash blue LED off
+      analogWrite(bluePin, 0);       // Turn off blue LED
+      noTone(buzzerPin);             // Turn off buzzer
+      digitalWrite(motorPin, LOW);   // Turn off motor
+      delay(250);                    // Wait 250ms (second half of flash cycle)
+
+    } else {
+      // Red - No motion detected
+      analogWrite(redPin, 255);      // Turn on red LED
+      analogWrite(greenPin, 0);      // Turn off green LED
+      analogWrite(bluePin, 0);       // Turn off blue LED
+
+      Serial.println("No motion detected");  // Display message in Serial Monitor
+
+      // Turn off buzzer and motor
+      noTone(buzzerPin);
+      digitalWrite(motorPin, LOW);
+      delay(500);                    // Wait 500ms before next motion check
+    }
+
+  } else {
+    // Green - System is deactivated
+    analogWrite(redPin, 0);          // Turn off red LED
+    analogWrite(greenPin, 255);      // Turn on green LED
+    analogWrite(bluePin, 0);         // Turn off blue LED
+
+    Serial.println("System Deactivated");  // Display message in Serial Monitor
+
+    // Turn off buzzer and motor
+    noTone(buzzerPin);
+    digitalWrite(motorPin, LOW);
+    delay(1000);                     // Wait 1 second before rechecking
+  }
+}
+
+// Handle serial commands 'd' (deactivate) and 's' (start/activate)
+void handleSerial() {
+  if (Serial.available()) {             // Check if there's any serial input
+    char command = Serial.read();       // Read the incoming character
+
+    if (command == 'd') {               // If 'd' is received
+      deactivateSystem();               // Deactivate the alarm system
+    } else if (command == 's') {        // If 's' is received
+      activateSystem();                 // Activate the alarm system
+    }
+  }
+}
+
+// Function to detect button press (distinguishes between single and double press)
+void checkButton() {
+  bool buttonState = digitalRead(buttonPin);  // Read the current state of the button
+
+  // Detect state change from unpressed to pressed
+  if (buttonState == LOW && lastButtonState == HIGH && millis() - lastButtonPressTime > debounceDelay) {
+    lastButtonPressTime = millis();   // Record the time of button press
+    buttonPressFlag = true;           // Set flag that a button was pressed
+  } 
+
+  // If a button press is detected within 1 second, treat it as valid and handle
+  if (buttonPressFlag && millis() - lastButtonPressTime < 1000) {
+    buttonPressFlag = false;          // Clear flag
+    handleButtonPress();              // Call handler for button press
+  } else if (buttonPressFlag && millis() - lastButtonPressTime > 1000) {
+    buttonPressFlag = false;          // Clear flag if too much time has passed
+    handleButtonPress();              // Still treat it as a valid single press
+  }
+
+  lastButtonState = buttonState;      // Save current state for next loop comparison
+}
+
+// Handle the button press action (toggle system state)
+void handleButtonPress() {
+  if (systemActive) {
+    Serial.println("System deactivated");  // Show message in Serial Monitor
+    deactivateSystem();                    // Turn system off
+  } else {
+    Serial.println("System re-armed");     // Show message in Serial Monitor
+    activateSystem();                      // Turn system on
+  }
+}
+
+// Function to activate the alarm system
+void activateSystem() {
+  systemActive = true;                     // Set system state to active
+  Serial.println("System Activated");      // Show activation message in Serial Monitor
+}
+
+// Function to deactivate the alarm system
+void deactivateSystem() {
+  systemActive = false;                    // Set system state to inactive
+  Serial.println("System Deactivated");    // Show deactivation message in Serial Monitor
+}
+
+// Every code that has a Serial.println("") will display what is in between the brackets 
+// based on what the current state of the alarm system is, and it will be displayed on the Serial Monitor
